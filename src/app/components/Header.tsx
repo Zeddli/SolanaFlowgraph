@@ -12,7 +12,6 @@ export default function Header() {
     { name: 'Home', href: '/' },
     { name: 'Visualization', href: '/visualization' },
     { name: 'Statistics', href: '/statistics' },
-    { name: 'Wallet Tracker', href: '/wallet-tracker' },
     { name: 'Documentation', href: '/documentation' },
     { name: 'About', href: '/about' },
   ];
