@@ -1,0 +1,139 @@
+Judging Criteria
+Submissions will be evaluated on the following baseline criteria in addition to track-specific elements:
+
+Originality: attribution required if you build off existing work
+
+Accuracy: Factual accuracy of the information and the relevance of the data used.
+
+Resources: Inclusion of resources to support your claims with proper attributions.
+
+Writing Style & Presentation: Quality, readability, and engagement level of your content.
+
+Disqualifications:
+
+Submissions will be rejected if:
+
+They are not in English.
+
+All submissions must attach links to any references used (failure to include may result in rejection).
+
+The link to your submission must be publicly viewable on and after the submission deadline.
+
+In addition, entries will be judged on:
+
+Innovation & Impact: How effectively does the tool visualize complex blockchain data in an intuitive way?
+
+Technical Execution: Robustness of the data integration, performance of the visualization, and quality of the code.
+
+User Experience: Ease-of-use and clarity of visual outputs, enabling both casual users and experts to derive insights.
+
+Investigation Utility: Ability to support deep-dive investigations into protocols, wallets, and transactions.
+
+
+
+
+
+Task Breakdown and Timeline
+Assuming 16 hours of work across 2 days (8 hours per day), here’s the detailed timeline:
+Day 1
+8:00 AM - 10:00 AM: Set Up Development Environment (2 hours)  
+Install tools (e.g., Node.js, a visualization library like D3.js or Cytoscape.js).  
+
+Ensure compatibility with Solana API or prepare a mock dataset.  
+
+Goal: A working foundation to build upon.
+
+10:00 AM - 1:00 PM: Data Fetching and Processing (3 hours)  
+Fetch Solana transaction data via API (e.g., Solana JSON RPC) or use a pre-existing dataset.  
+
+Process data into a format suitable for visualization (e.g., nodes: wallets, edges: transactions).  
+
+Ensure accuracy by cross-checking with official Solana documentation.  
+
+Goal: Reliable, factual data ready for visualization.
+
+1:00 PM - 2:00 PM: Lunch Break (1 hour)  
+Rest to maintain productivity.
+
+2:00 PM - 6:00 PM: Basic Visualization Implementation (4 hours)  
+Build a graph where wallets are nodes and transactions are edges.  
+
+Use an open-source library (with attribution for originality).  
+
+Focus on clarity and readability for user experience.  
+
+Goal: A functional, intuitive visualization.
+
+6:00 PM - 8:00 PM: Add User Interactions (2 hours)  
+Implement basic features like searching for a wallet or filtering transactions by amount.  
+
+Ensure ease-of-use for both casual and expert users.  
+
+Goal: A usable interface that supports investigation utility.
+
+Day 2
+8:00 AM - 12:00 PM: Enhance Visualization Features (4 hours)  
+Add innovative elements (e.g., node size based on wallet balance, edge thickness based on transaction value).  
+
+Optimize performance for technical execution.  
+
+Test with sample data to ensure accuracy and impact.  
+
+Goal: A polished, impactful visualization.
+
+12:00 PM - 1:00 PM: Lunch Break (1 hour)  
+Recharge for the final push.
+
+1:00 PM - 3:00 PM: Testing and Debugging (2 hours)  
+Test functionality, fix bugs, and verify data accuracy.  
+
+Ensure the tool supports deep-dive analysis (investigation utility).  
+
+Goal: A robust, error-free submission.
+
+3:00 PM - 6:00 PM: Documentation and Write-Up (3 hours)  
+Write a 1,000+ word overview in English, covering:  
+Purpose and innovation of the tool.  
+
+Technical details and data sources (with references).  
+
+User guide for clarity and engagement.
+
+Include links to all resources (e.g., Solana API docs, libraries used).  
+
+Goal: A high-quality, readable submission that meets presentation criteria.
+
+6:00 PM - 8:00 PM: Final Review and Submission Prep (2 hours)  
+Review the tool and write-up against all judging criteria.  
+
+Ensure the submission link is publicly viewable.  
+
+Prepare a tweet tagging @DedMonkes
+ with the submission link.  
+
+Goal: A complete, compliant submission.
+
+Key Considerations
+Originality: We’ll build on open-source tools but add unique features (e.g., transaction-based edge thickness), with proper attribution.  
+
+Accuracy: Data will be sourced from Solana’s official API or verified datasets.  
+
+Resources: All references (e.g., API docs, libraries) will be cited in the write-up.  
+
+Innovation & Impact: The graph will simplify complex blockchain data intuitively.  
+
+Technical Execution: Code will be optimized and well-documented.  
+
+User Experience: Simple controls will cater to all users.  
+
+Investigation Utility: Filters and search will enable wallet/transaction analysis.
+
+Risk Mitigation
+Limited Time: Prioritize the MVP; enhancements are secondary.  
+
+API Issues: Use mock data if Solana API access is delayed.  
+
+Teamwork: If applicable, split tasks (e.g., one person on data, another on visualization).  
+
+Documentation: Draft sections early to avoid a rush on Day 2.
+
