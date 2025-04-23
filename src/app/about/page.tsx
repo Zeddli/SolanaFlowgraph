@@ -54,44 +54,14 @@ export default function AboutPage() {
             <h2 className="text-xl font-semibold mb-4">Technology Stack</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {['Next.js', 'TypeScript', 'Tailwind CSS', 'React', 'Solana Web3.js', 'D3.js'].map((tech) => (
-                <div key={tech} className="bg-gray-50 rounded p-3 text-center">
+                <div key={tech} className="bg-blue-400 rounded p-3 text-center">
                   <span className="font-medium">{tech}</span>
                 </div>
               ))}
             </div>
           </div>
           
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Contact Us</h2>
-            <p className="text-gray-700 mb-4">
-              We're always looking to improve SolanaFlowGraph. If you have any suggestions, questions, or just want to
-              say hello, please reach out to us.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <a 
-                href="https://github.com/Zeddli/solana-flowgraph"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-gray-800 hover:bg-gray-700"
-              >
-                GitHub
-              </a>
-              <a 
-                href="mailto:contact@solanaflowgraph.io"
-                className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary/90"
-              >
-                Email Us
-              </a>
-              <a 
-                href="https://twitter.com/solanaflowgraph"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-400 hover:bg-blue-500"
-              >
-                Twitter
-              </a>
-            </div>
-          </div>
+          
         </div>
       </div>
     </main>
