@@ -26,6 +26,19 @@ Solana FlowGraph collects and visualizes blockchain data from multiple reliable 
 
 ## Data Collection Methodology
 
+### Sample Data Source
+1. **Solana Historical Data**
+   - https://www.kaggle.com/datasets/thedevastator/solana-blockchain-dataset
+
+2. **Solana Transaction by Fee Type**
+   - https://dune.com/queries/4314353
+
+3. **Solana Transaction Filter**
+   - https://dune.com/queries/2660040
+
+4. **Solana Transaction by Fee Type by Program (last 48 hours, top 1000 programs)**
+   - https://dune.com/queries/4314734
+
 ### Health-Aware Data Collection
 
 Solana FlowGraph uses a health-aware data collection system that:
