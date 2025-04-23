@@ -24,8 +24,6 @@ Solana FlowGraph collects and visualizes blockchain data from multiple reliable 
    - Redis for temporary caching of frequently accessed data
    - Browser storage for client-side caching to reduce API calls
 
-## Data Collection Methodology
-
 ### Sample Data Source
 1. **Solana Historical Data**
    - https://www.kaggle.com/datasets/thedevastator/solana-blockchain-dataset
@@ -38,6 +36,9 @@ Solana FlowGraph collects and visualizes blockchain data from multiple reliable 
 
 4. **Solana Transaction by Fee Type by Program (last 48 hours, top 1000 programs)**
    - https://dune.com/queries/4314734
+   
+
+## Data Collection Methodology
 
 ### Health-Aware Data Collection
 
