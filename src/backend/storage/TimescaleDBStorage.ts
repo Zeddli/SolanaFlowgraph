@@ -1,5 +1,13 @@
 import { Pool, PoolClient } from 'pg';
-import { TimeSeriesStorage, TimeSeriesQuery, TimeSeriesEntry, MetricType } from './types';
+import { TimeSeriesStorage, TimeSeriesQuery, TimeSeriesEntry, TimeSeriesMetadata } from './types';
+
+// Define MetricType since it's missing from types.ts
+export enum MetricType {
+  GAUGE = 'gauge',
+  COUNTER = 'counter',
+  HISTOGRAM = 'histogram',
+  SUMMARY = 'summary'
+}
 
 export interface TimescaleDBConfig {
   host: string;
@@ -131,6 +139,124 @@ export class TimescaleDBStorage implements TimeSeriesStorage {
   }
 
   /**
+   * Insert a single time series entry
+   * Implementation of TimeSeriesStorage.insert
+   */
+  async insert(measurement: string, entry: TimeSeriesEntry): Promise<void> {
+    return this.insertBatch(measurement, [entry]);
+  }
+
+  /**
+   * Insert multiple time series entries in batch
+   * Implementation of TimeSeriesStorage.insertBatch
+   */
+  async insertBatch(measurement: string, entries: TimeSeriesEntry[]): Promise<void> {
+    return this.store(measurement, entries);
+  }
+
+  /**
+   * Get metadata for a measurement
+   * Implementation of TimeSeriesStorage.getMetadata
+   */
+  async getMetadata(measurement: string): Promise<TimeSeriesMetadata> {
+    if (!this.connected) {
+      throw new Error('Not connected to TimescaleDB');
+    }
+
+    // Select the appropriate table based on measurement
+    let tableName: string;
+    switch (measurement) {
+      case 'transaction':
+        tableName = 'transactions';
+        break;
+      case 'metric':
+        tableName = 'metrics';
+        break;
+      default:
+        tableName = 'metrics';
+    }
+
+    // Ensure table exists
+    if (!this.tables.has(tableName)) {
+      throw new Error(`Table ${tableName} does not exist`);
+    }
+
+    // Query for metadata
+    let fieldsQuery: string;
+    if (tableName === 'transactions') {
+      fieldsQuery = `
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'transactions'
+      `;
+    } else {
+      fieldsQuery = `
+        SELECT DISTINCT metric_name 
+        FROM metrics
+      `;
+    }
+
+    const fields = await this.pool.query(fieldsQuery);
+    
+    // Get count
+    const countQuery = `SELECT COUNT(*) FROM ${tableName}`;
+    const countResult = await this.pool.query(countQuery);
+    
+    // Get time range
+    const timeRangeQuery = `
+      SELECT 
+        MIN(time) as earliest,
+        MAX(time) as latest
+      FROM ${tableName}
+    `;
+    const timeResult = await this.pool.query(timeRangeQuery);
+
+    // Create metadata object
+    const metadata: TimeSeriesMetadata = {
+      measurement,
+      fields: fields.rows.map(row => row.column_name || row.metric_name),
+      tags: [],
+      totalRecords: parseInt(countResult.rows[0].count)
+    };
+
+    if (timeResult.rows[0].earliest) {
+      metadata.earliestRecord = timeResult.rows[0].earliest;
+    }
+    if (timeResult.rows[0].latest) {
+      metadata.latestRecord = timeResult.rows[0].latest;
+    }
+
+    return metadata;
+  }
+
+  /**
+   * Drop a measurement
+   * Implementation of TimeSeriesStorage.dropMeasurement
+   */
+  async dropMeasurement(measurement: string): Promise<void> {
+    if (!this.connected) {
+      throw new Error('Not connected to TimescaleDB');
+    }
+
+    // Select the appropriate table based on measurement
+    let tableName: string;
+    switch (measurement) {
+      case 'transaction':
+        tableName = 'transactions';
+        break;
+      case 'metric':
+        tableName = 'metrics';
+        break;
+      default:
+        throw new Error(`Unknown measurement: ${measurement}`);
+    }
+
+    // Drop the table
+    await this.pool.query(`DROP TABLE IF EXISTS ${tableName}`);
+    this.tables.delete(tableName);
+  }
+
+  /**
    * Store a time series entry
    */
   async store(measurement: string, entries: TimeSeriesEntry[]): Promise<void> {
@@ -193,23 +319,23 @@ export class TimescaleDBStorage implements TimeSeriesStorage {
     let paramIndex = 1;
     
     entries.forEach(entry => {
-      const { timestamp, fields } = entry;
+      const { timestamp, data } = entry;
       
       values.push(`($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`);
       
       params.push(
         timestamp,
-        fields.signature || '',
-        fields.slot || 0,
-        fields.block_hash || null,
-        fields.fee || 0,
-        fields.program_id || null,
-        fields.status || 'unknown',
-        fields.error || null,
-        fields.source_wallet || null,
-        fields.target_wallet || null,
-        fields.amount || null,
-        fields.token_id || null
+        data.signature || '',
+        data.slot || 0,
+        data.block_hash || null,
+        data.fee || 0,
+        data.program_id || null,
+        data.status || 'unknown',
+        data.error || null,
+        data.source_wallet || null,
+        data.target_wallet || null,
+        data.amount || null,
+        data.token_id || null
       );
     });
     
@@ -246,15 +372,15 @@ export class TimescaleDBStorage implements TimeSeriesStorage {
     let paramIndex = 1;
     
     entries.forEach(entry => {
-      const { timestamp, name, value, type, tags } = entry;
+      const { timestamp, data, tags } = entry;
       
       values.push(`($${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++}, $${paramIndex++})`);
       
       params.push(
         timestamp,
-        name || 'unknown',
-        type || MetricType.GAUGE,
-        value || 0,
+        data.metricName || 'unknown',
+        data.metricType || MetricType.GAUGE,
+        data.value || 0,
         tags ? JSON.stringify(tags) : '{}'
       );
     });
@@ -310,37 +436,37 @@ export class TimescaleDBStorage implements TimeSeriesStorage {
    * Query transactions table
    */
   private async queryTransactions(query: TimeSeriesQuery): Promise<TimeSeriesEntry[]> {
-    const { from, to, filters, aggregation, limit } = query;
+    const { startTime, endTime, tags, aggregation, limit } = query;
     
     // Build the SQL query
     let sql = `SELECT * FROM transactions WHERE time >= $1 AND time <= $2`;
     const params: any[] = [
-      from || new Date(Date.now() - 24 * 60 * 60 * 1000),
-      to || new Date()
+      startTime || new Date(Date.now() - 24 * 60 * 60 * 1000),
+      endTime || new Date()
     ];
     
     let paramIndex = 3;
     
-    // Add filters
-    if (filters) {
-      if (filters.signature) {
+    // Add filters from tags
+    if (tags) {
+      if (tags.signature) {
         sql += ` AND signature = $${paramIndex++}`;
-        params.push(filters.signature);
+        params.push(tags.signature);
       }
       
-      if (filters.program_id) {
+      if (tags.program_id) {
         sql += ` AND program_id = $${paramIndex++}`;
-        params.push(filters.program_id);
+        params.push(tags.program_id);
       }
       
-      if (filters.status) {
+      if (tags.status) {
         sql += ` AND status = $${paramIndex++}`;
-        params.push(filters.status);
+        params.push(tags.status);
       }
       
-      if (filters.wallet) {
+      if (tags.wallet) {
         sql += ` AND (source_wallet = $${paramIndex} OR target_wallet = $${paramIndex})`;
-        params.push(filters.wallet);
+        params.push(tags.wallet);
         paramIndex++;
       }
     }
@@ -355,9 +481,7 @@ export class TimescaleDBStorage implements TimeSeriesStorage {
     // Map database rows to TimeSeriesEntry objects
     return result.rows.map(row => ({
       timestamp: row.time,
-      name: 'transaction',
-      value: row.amount || 0,
-      fields: {
+      data: {
         signature: row.signature,
         slot: row.slot,
         block_hash: row.block_hash,
@@ -369,6 +493,11 @@ export class TimescaleDBStorage implements TimeSeriesStorage {
         target_wallet: row.target_wallet,
         amount: row.amount,
         token_id: row.token_id
+      },
+      tags: {
+        signature: row.signature,
+        program_id: row.program_id,
+        status: row.status
       }
     }));
   }
@@ -377,7 +506,9 @@ export class TimescaleDBStorage implements TimeSeriesStorage {
    * Query metrics table
    */
   private async queryMetrics(query: TimeSeriesQuery): Promise<TimeSeriesEntry[]> {
-    const { from, to, metricNames, aggregation, interval, filters, limit } = query;
+    const { startTime, endTime, tags, aggregation, groupBy, limit } = query;
+    const metricNames = tags?.metricNames as string[] | undefined;
+    const interval = tags?.interval as string | undefined;
     
     // Check if we should do time-based aggregation
     const useAggregation = aggregation && interval;
@@ -385,8 +516,8 @@ export class TimescaleDBStorage implements TimeSeriesStorage {
     // Build the SQL query
     let sql: string;
     const params: any[] = [
-      from || new Date(Date.now() - 24 * 60 * 60 * 1000),
-      to || new Date()
+      startTime || new Date(Date.now() - 24 * 60 * 60 * 1000),
+      endTime || new Date()
     ];
     
     let paramIndex = 3;
@@ -440,9 +571,9 @@ export class TimescaleDBStorage implements TimeSeriesStorage {
     }
     
     // Add dimension filters
-    if (filters && Object.keys(filters).length > 0) {
-      for (const [key, value] of Object.entries(filters)) {
-        if (key !== 'metricNames') {
+    if (tags && Object.keys(tags).length > 0) {
+      for (const [key, value] of Object.entries(tags)) {
+        if (key !== 'metricNames' && key !== 'interval') {
           sql += ` AND dimensions->>'${key}' = $${paramIndex++}`;
           params.push(value);
         }
@@ -469,9 +600,11 @@ export class TimescaleDBStorage implements TimeSeriesStorage {
       
       return {
         timestamp,
-        name: row.metric_name,
-        type: row.metric_type,
-        value: row.value,
+        data: {
+          metricName: row.metric_name,
+          metricType: row.metric_type,
+          value: row.value
+        },
         tags: row.dimensions
       };
     });

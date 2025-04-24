@@ -1,6 +1,20 @@
-import { GraphStorage, GraphQuery, Node, Edge, Relationship, NodeType } from './types';
-import neo4j, { Driver, Session, Result, Record } from 'neo4j-driver';
+import { GraphStorage, GraphQuery, Node, Edge, NodeType } from './types';
+import neo4j, { Driver, Integer, Node as Neo4jNode, Relationship as Neo4jRelationship, QueryResult } from 'neo4j-driver';
 
+/**
+ * Neo4j edge relationship types
+ */
+export enum RelationshipType {
+  SENDS = 'SENDS',
+  RECEIVES = 'RECEIVES',
+  INTERACTS = 'INTERACTS',
+  CALLS = 'CALLS',
+  OWNS = 'OWNS'
+}
+
+/**
+ * Configuration for Neo4j connection
+ */
 export interface Neo4jConfig {
   uri: string;
   username: string;
@@ -37,7 +51,6 @@ export class Neo4jGraphStorage implements GraphStorage {
       
       // Create constraints and indexes for better performance
       await this.createSchema();
-      
     } catch (error) {
       console.error('Failed to connect to Neo4j:', error);
       throw error;
@@ -83,9 +96,9 @@ export class Neo4jGraphStorage implements GraphStorage {
   }
 
   /**
-   * Add a node to the graph
+   * Create a node in the graph
    */
-  async addNode(node: Node): Promise<void> {
+  async createNode(node: Node): Promise<Node> {
     if (!this.connected) {
       throw new Error('Not connected to Neo4j database');
     }
@@ -105,24 +118,36 @@ export class Neo4jGraphStorage implements GraphStorage {
         case NodeType.TOKEN:
           nodeLabel = 'Token';
           break;
-        case NodeType.PROTOCOL:
-          nodeLabel = 'Protocol';
+        case NodeType.TRANSACTION:
+          nodeLabel = 'Transaction';
+          break;
+        case NodeType.VALIDATOR:
+          nodeLabel = 'Validator';
+          break;
+        case NodeType.NFT:
+          nodeLabel = 'NFT';
           break;
         default:
           nodeLabel = 'Node';
       }
       
-      // Convert properties to Neo4j-friendly format
-      const properties = { ...node.properties, id: node.id };
+      // Neo4j doesn't handle Date objects directly, convert to strings
+      const properties = {
+        ...node.properties,
+        id: node.id,
+        createdAt: node.createdAt.toISOString(),
+        updatedAt: node.updatedAt.toISOString()
+      };
       
       // Create or merge node
       await session.run(
         `MERGE (n:${nodeLabel} {id: $id})
          SET n += $properties
          RETURN n`,
-        { id: node.id, properties }
+        { id: node.id, properties } 
       );
       
+      return node;
     } catch (error) {
       console.error(`Failed to add node ${node.id} to Neo4j:`, error);
       throw error;
@@ -132,9 +157,9 @@ export class Neo4jGraphStorage implements GraphStorage {
   }
 
   /**
-   * Add an edge between nodes in the graph
+   * Get a node by ID
    */
-  async addEdge(edge: Edge): Promise<void> {
+  async getNode(id: string): Promise<Node | null> {
     if (!this.connected) {
       throw new Error('Not connected to Neo4j database');
     }
@@ -142,46 +167,297 @@ export class Neo4jGraphStorage implements GraphStorage {
     const session = this.driver.session({ database: this.database });
     
     try {
-      const { source, target, relationship, properties } = edge;
+      const result = await session.run(
+        `MATCH (n {id: $id})
+         RETURN n`,
+        { id } 
+      );
       
-      // Map relationship type to Neo4j relationship
-      let relType: string;
-      switch (relationship) {
-        case Relationship.SENDS:
-          relType = 'SENDS';
-          break;
-        case Relationship.RECEIVES:
-          relType = 'RECEIVES';
-          break;
-        case Relationship.INTERACTS:
-          relType = 'INTERACTS';
-          break;
-        case Relationship.CALLS:
-          relType = 'CALLS';
-          break;
-        case Relationship.OWNS:
-          relType = 'OWNS';
-          break;
-        default:
-          relType = 'RELATES_TO';
+      if (result.records.length === 0) {
+        return null;
       }
+      
+      const record = result.records[0];
+      const neo4jNode = record.get('n');
+      
+      // Extract node type from labels
+      let type = NodeType.PROGRAM; // Default
+      if (neo4jNode.labels.includes('Wallet')) type = NodeType.WALLET;
+      else if (neo4jNode.labels.includes('Program')) type = NodeType.PROGRAM;
+      else if (neo4jNode.labels.includes('Token')) type = NodeType.TOKEN;
+      else if (neo4jNode.labels.includes('Transaction')) type = NodeType.TRANSACTION;
+      else if (neo4jNode.labels.includes('Validator')) type = NodeType.VALIDATOR;
+      else if (neo4jNode.labels.includes('NFT')) type = NodeType.NFT;
+      
+      // Extract properties (removing timestamps that we'll handle separately)
+      const { id: nodeId, createdAt, updatedAt, ...rest } = neo4jNode.properties;
+      
+      // Create Node object
+      const node: Node = {
+        id: nodeId,
+        type,
+        properties: rest,
+        createdAt: new Date(createdAt),
+        updatedAt: new Date(updatedAt)
+      };
+      
+      return node;
+    } catch (error) {
+      console.error(`Failed to get node ${id} from Neo4j:`, error);
+      throw error;
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * Update a node's properties
+   */
+  async updateNode(id: string, properties: Record<string, any>): Promise<Node> {
+    if (!this.connected) {
+      throw new Error('Not connected to Neo4j database');
+    }
+    
+    const session = this.driver.session({ database: this.database });
+    
+    try {
+      const updatedAt = new Date().toISOString();
+      
+      // Update the node
+      const result = await session.run(
+        `MATCH (n {id: $id})
+         SET n += $properties, n.updatedAt = $updatedAt
+         RETURN n`,
+        { id, properties, updatedAt }
+      );
+      
+      if (result.records.length === 0) {
+        throw new Error(`Node with ID ${id} not found`);
+      }
+      
+      const record = result.records[0];
+      const neo4jNode = record.get('n');
+      
+      // Extract node type from labels
+      let type = NodeType.PROGRAM; // Default
+      if (neo4jNode.labels.includes('Wallet')) type = NodeType.WALLET;
+      else if (neo4jNode.labels.includes('Program')) type = NodeType.PROGRAM;
+      else if (neo4jNode.labels.includes('Token')) type = NodeType.TOKEN;
+      else if (neo4jNode.labels.includes('Transaction')) type = NodeType.TRANSACTION;
+      else if (neo4jNode.labels.includes('Validator')) type = NodeType.VALIDATOR;
+      else if (neo4jNode.labels.includes('NFT')) type = NodeType.NFT;
+      
+      // Extract properties (removing timestamps that we'll handle separately)
+      const { id: nodeId, createdAt, updatedAt: updatedAtStr, ...rest } = neo4jNode.properties;
+      
+      // Create Node object
+      const node: Node = {
+        id: nodeId,
+        type,
+        properties: rest,
+        createdAt: new Date(createdAt),
+        updatedAt: new Date(updatedAtStr)
+      };
+      
+      return node;
+    } catch (error) {
+      console.error(`Failed to update node ${id} in Neo4j:`, error);
+      throw error;
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * Delete a node
+   */
+  async deleteNode(id: string): Promise<void> {
+    if (!this.connected) {
+      throw new Error('Not connected to Neo4j database');
+    }
+    
+    const session = this.driver.session({ database: this.database });
+    
+    try {
+      // Delete the node
+      await session.run(
+        `MATCH (n {id: $id})
+         DETACH DELETE n`,
+        { id }
+      );
+    } catch (error) {
+      console.error(`Failed to delete node ${id} from Neo4j:`, error);
+      throw error;
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * Create an edge between nodes
+   */
+  async createEdge(edge: Edge): Promise<Edge> {
+    if (!this.connected) {
+      throw new Error('Not connected to Neo4j database');
+    }
+    
+    const session = this.driver.session({ database: this.database });
+    
+    try {
+      const { sourceId, targetId, type, properties } = edge;
+      
+      // Convert timestamps to strings for Neo4j
+      const edgeProperties = {
+        ...properties,
+        id: edge.id,
+        createdAt: edge.createdAt.toISOString(),
+        updatedAt: edge.updatedAt.toISOString()
+      };
       
       // Create relationship between nodes
       await session.run(
         `MATCH (source {id: $sourceId})
          MATCH (target {id: $targetId})
-         MERGE (source)-[r:${relType}]->(target)
-         SET r += $properties
+         MERGE (source)-[r:${type}]->(target)
+         SET r = $properties
          RETURN r`,
         { 
-          sourceId: source, 
-          targetId: target, 
-          properties: { ...properties, id: edge.id } 
+          sourceId, 
+          targetId, 
+          properties: edgeProperties
         }
       );
       
+      return edge;
     } catch (error) {
       console.error(`Failed to add edge ${edge.id} to Neo4j:`, error);
+      throw error;
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * Get an edge by ID
+   */
+  async getEdge(id: string): Promise<Edge | null> {
+    if (!this.connected) {
+      throw new Error('Not connected to Neo4j database');
+    }
+    
+    const session = this.driver.session({ database: this.database });
+    
+    try {
+      const result = await session.run(
+        `MATCH ()-[r {id: $id}]->()
+         RETURN r, startNode(r) as source, endNode(r) as target`,
+        { id }
+      );
+      
+      if (result.records.length === 0) {
+        return null;
+      }
+      
+      const record = result.records[0];
+      const relationship = record.get('r');
+      const sourceNode = record.get('source');
+      const targetNode = record.get('target');
+      
+      // Extract properties
+      const { id: edgeId, createdAt, updatedAt, ...restProps } = relationship.properties;
+      
+      // Create Edge object
+      const edge: Edge = {
+        id: edgeId,
+        sourceId: sourceNode.properties.id,
+        targetId: targetNode.properties.id,
+        type: relationship.type,
+        properties: restProps,
+        createdAt: new Date(createdAt),
+        updatedAt: new Date(updatedAt)
+      };
+      
+      return edge;
+    } catch (error) {
+      console.error(`Failed to get edge ${id} from Neo4j:`, error);
+      throw error;
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * Update an edge's properties
+   */
+  async updateEdge(id: string, properties: Record<string, any>): Promise<Edge> {
+    if (!this.connected) {
+      throw new Error('Not connected to Neo4j database');
+    }
+    
+    const session = this.driver.session({ database: this.database });
+    
+    try {
+      const updatedAt = new Date().toISOString();
+      
+      // Update the edge
+      const result = await session.run(
+        `MATCH ()-[r {id: $id}]->()
+         SET r += $properties, r.updatedAt = $updatedAt
+         RETURN r, startNode(r) as source, endNode(r) as target`,
+        { id, properties, updatedAt }
+      );
+      
+      if (result.records.length === 0) {
+        throw new Error(`Edge with ID ${id} not found`);
+      }
+      
+      const record = result.records[0];
+      const relationship = record.get('r');
+      const sourceNode = record.get('source');
+      const targetNode = record.get('target');
+      
+      // Extract properties
+      const { id: edgeId, createdAt, updatedAt: updatedAtStr, ...restProps } = relationship.properties;
+      
+      // Create Edge object
+      const edge: Edge = {
+        id: edgeId,
+        sourceId: sourceNode.properties.id,
+        targetId: targetNode.properties.id,
+        type: relationship.type,
+        properties: restProps,
+        createdAt: new Date(createdAt),
+        updatedAt: new Date(updatedAtStr)
+      };
+      
+      return edge;
+    } catch (error) {
+      console.error(`Failed to update edge ${id} in Neo4j:`, error);
+      throw error;
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
+   * Delete an edge
+   */
+  async deleteEdge(id: string): Promise<void> {
+    if (!this.connected) {
+      throw new Error('Not connected to Neo4j database');
+    }
+    
+    const session = this.driver.session({ database: this.database });
+    
+    try {
+      // Delete the edge
+      await session.run(
+        `MATCH ()-[r {id: $id}]->()
+         DELETE r`,
+        { id }
+      );
+    } catch (error) {
+      console.error(`Failed to delete edge ${id} from Neo4j:`, error);
       throw error;
     } finally {
       await session.close();
@@ -206,9 +482,28 @@ export class Neo4jGraphStorage implements GraphStorage {
       // Execute the query
       const queryResult = await session.run(cypher, params);
       
-      // Process results
-      result.nodes = this.extractNodes(queryResult);
-      result.edges = this.extractEdges(queryResult);
+      // Process results - collect all nodes and relationships
+      const nodeMap = new Map<string, Node>();
+      const edgeMap = new Map<string, Edge>();
+      
+      for (const record of queryResult.records) {
+        // Extract all nodes from the record
+        for (const key of record.keys) {
+          const value = record.get(key);
+          
+          // If it's a node
+          if (value && neo4j.isNode(value)) {
+            this.processNeo4jNode(value as Neo4jNode, nodeMap);
+          }
+          // If it's a relationship
+          else if (value && neo4j.isRelationship(value)) {
+            this.processNeo4jRelationship(value as Neo4jRelationship, edgeMap, queryResult);
+          }
+        }
+      }
+      
+      result.nodes = Array.from(nodeMap.values());
+      result.edges = Array.from(edgeMap.values());
       
     } catch (error) {
       console.error('Failed to query Neo4j:', error);
@@ -221,143 +516,188 @@ export class Neo4jGraphStorage implements GraphStorage {
   }
 
   /**
+   * Process a Neo4j node into our Node type
+   */
+  private processNeo4jNode(neo4jNode: Neo4jNode, nodeMap: Map<string, Node>): void {
+    // Skip if no ID or already processed
+    if (!neo4jNode.properties.id || nodeMap.has(neo4jNode.properties.id)) {
+      return;
+    }
+    
+    // Extract node type from labels
+    let type = NodeType.PROGRAM; // Default
+    if (neo4jNode.labels.includes('Wallet')) type = NodeType.WALLET;
+    else if (neo4jNode.labels.includes('Program')) type = NodeType.PROGRAM;
+    else if (neo4jNode.labels.includes('Token')) type = NodeType.TOKEN;
+    else if (neo4jNode.labels.includes('Transaction')) type = NodeType.TRANSACTION;
+    else if (neo4jNode.labels.includes('Validator')) type = NodeType.VALIDATOR;
+    else if (neo4jNode.labels.includes('NFT')) type = NodeType.NFT;
+    
+    // Extract properties (removing id and timestamps that we handle separately)
+    const { id, createdAt, updatedAt, ...rest } = neo4jNode.properties;
+    
+    // Create Node object with default timestamps if missing
+    const node: Node = {
+      id,
+      type,
+      properties: rest,
+      createdAt: createdAt ? new Date(createdAt) : new Date(),
+      updatedAt: updatedAt ? new Date(updatedAt) : new Date()
+    };
+    
+    nodeMap.set(id, node);
+  }
+
+  /**
+   * Process a Neo4j relationship into our Edge type
+   */
+  private processNeo4jRelationship(
+    relationship: Neo4jRelationship, 
+    edgeMap: Map<string, Edge>,
+    queryResult: QueryResult<Record<string, any>>
+  ): void {
+    // Generate ID if not present
+    const id = relationship.properties.id || 
+      `${relationship.startNodeElementId}-${relationship.type}-${relationship.endNodeElementId}`;
+    
+    // Skip if already processed
+    if (edgeMap.has(id)) {
+      return;
+    }
+    
+    // Find source and target IDs - this is complex because we need to find the node objects
+    let sourceId = '';
+    let targetId = '';
+    
+    // Try to find source and target nodes from the records
+    for (const record of queryResult.records) {
+      for (const key of record.keys) {
+        const value = record.get(key);
+        if (value && neo4j.isNode(value)) {
+          // Check if this node is the source or target of our relationship
+          if (value.identity.equals(relationship.startNodeElementId)) {
+            sourceId = value.properties.id;
+          } else if (value.identity.equals(relationship.endNodeElementId)) {
+            targetId = value.properties.id;
+          }
+        }
+      }
+    }
+    
+    // Skip if we couldn't find source and target IDs
+    if (!sourceId || !targetId) {
+      return;
+    }
+    
+    // Extract properties (removing ID and timestamps we handle separately)
+    const { id: edgeId, createdAt, updatedAt, ...rest } = relationship.properties;
+    
+    // Create Edge object with default timestamps if missing
+    const edge: Edge = {
+      id: edgeId || id,
+      sourceId,
+      targetId,
+      type: relationship.type,
+      properties: rest,
+      createdAt: createdAt ? new Date(createdAt) : new Date(),
+      updatedAt: updatedAt ? new Date(updatedAt) : new Date()
+    };
+    
+    edgeMap.set(edge.id, edge);
+  }
+
+  /**
+   * Find a path between two nodes
+   */
+  async findPathBetweenNodes(sourceId: string, targetId: string, maxDepth: number = 3): Promise<{ nodes: Node[], edges: Edge[] }> {
+    if (!this.connected) {
+      throw new Error('Not connected to Neo4j database');
+    }
+    
+    const session = this.driver.session({ database: this.database });
+    
+    try {
+      // Build path query
+      const cypher = `
+        MATCH path = (source {id: $sourceId})-[*..${maxDepth}]->(target {id: $targetId})
+        RETURN path
+        LIMIT 1
+      `;
+      
+      // Execute the query
+      const queryResult = await session.run(cypher, { sourceId, targetId });
+      
+      // Process results - if path is found, it will include nodes and relationships
+      const nodes: Node[] = [];
+      const edges: Edge[] = [];
+      
+      if (queryResult.records.length > 0) {
+        const path = queryResult.records[0].get('path');
+        
+        // Extract nodes and relationships from path
+        const nodeMap = new Map<string, Node>();
+        const edgeMap = new Map<string, Edge>();
+        
+        // Process path segments
+        for (const segment of path.segments) {
+          // Process start node
+          this.processNeo4jNode(segment.start as Neo4jNode, nodeMap);
+          
+          // Process end node
+          this.processNeo4jNode(segment.end as Neo4jNode, nodeMap);
+          
+          // Process relationship
+          this.processNeo4jRelationship(segment.relationship as Neo4jRelationship, edgeMap, queryResult);
+        }
+        
+        // Convert maps to arrays
+        nodes.push(...nodeMap.values());
+        edges.push(...edgeMap.values());
+      }
+      
+      return { nodes, edges };
+    } catch (error) {
+      console.error('Failed to find path in Neo4j:', error);
+      throw error;
+    } finally {
+      await session.close();
+    }
+  }
+
+  /**
    * Build a Cypher query from a GraphQuery object
    */
   private buildCypherQuery(query: GraphQuery): { cypher: string, params: any } {
     const params: any = {};
     let cypher = '';
     
-    if (query.path) {
-      // Path query between two nodes
+    // Start with a simple node-based query
+    if (query.startNodeId) {
       cypher = `
-        MATCH path = (source {id: $sourceId})-[*..${query.maxDepth || 3}]->(target {id: $targetId})
-        RETURN path
-        LIMIT ${query.limit || 100}
-      `;
-      params.sourceId = query.path.source;
-      params.targetId = query.path.target;
-    } else if (query.nodeIds && query.nodeIds.length > 0) {
-      // Query specific nodes and their relationships
-      cypher = `
-        MATCH (n) 
-        WHERE n.id IN $nodeIds
+        MATCH (n {id: $startNodeId})
         OPTIONAL MATCH (n)-[r]-(m)
+        WHERE r.type = $edgeType OR $edgeType IS NULL
         RETURN n, r, m
         LIMIT ${query.limit || 100}
       `;
-      params.nodeIds = query.nodeIds;
-    } else if (query.walletAnalysis) {
-      // Wallet activity analysis
+      params.startNodeId = query.startNodeId;
+      params.edgeType = query.edgeType;
+    } 
+    // Default query - recent transactions
+    else {
       cypher = `
-        MATCH (w:Wallet {id: $walletId})
-        OPTIONAL MATCH (w)-[r:SENDS|RECEIVES]->(target)
-        WITH w, target, COUNT(r) AS count
-        RETURN w, target, count
-        ORDER BY count DESC
-        LIMIT ${query.limit || 20}
-      `;
-      params.walletId = query.walletAnalysis.walletId;
-    } else {
-      // Default query - recent transactions
-      cypher = `
-        MATCH (t:Transaction)
-        WHERE t.timestamp >= $fromTime
+        MATCH (n:Transaction)
+        WHERE n.timestamp >= $fromTime
         OPTIONAL MATCH (source)-[r]->(target)
-        WHERE source.transactionId = t.id OR target.transactionId = t.id
-        RETURN t, source, r, target
-        ORDER BY t.timestamp DESC
+        WHERE (source.id = n.id OR target.id = n.id)
+        RETURN n, source, r, target
+        ORDER BY n.timestamp DESC
         LIMIT ${query.limit || 100}
       `;
-      params.fromTime = query.timeRange?.from || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      params.fromTime = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     }
     
     return { cypher, params };
-  }
-
-  /**
-   * Extract nodes from Neo4j query result
-   */
-  private extractNodes(result: Result): Node[] {
-    const nodeMap = new Map<string, Node>();
-    
-    result.records.forEach((record: Record) => {
-      record.forEach((value, key) => {
-        if (neo4j.isNode(value)) {
-          const props = value.properties as any;
-          const id = props.id as string;
-          
-          // Skip if already processed
-          if (nodeMap.has(id)) return;
-          
-          // Determine node type from labels
-          let type = NodeType.UNKNOWN;
-          if (value.labels.includes('Wallet')) type = NodeType.WALLET;
-          else if (value.labels.includes('Program')) type = NodeType.PROGRAM;
-          else if (value.labels.includes('Token')) type = NodeType.TOKEN;
-          else if (value.labels.includes('Protocol')) type = NodeType.PROTOCOL;
-          
-          // Create node object
-          const node: Node = {
-            id,
-            type,
-            properties: { ...props }
-          };
-          
-          // Remove id from properties as it's already the node ID
-          delete node.properties.id;
-          
-          nodeMap.set(id, node);
-        }
-      });
-    });
-    
-    return Array.from(nodeMap.values());
-  }
-
-  /**
-   * Extract edges from Neo4j query result
-   */
-  private extractEdges(result: Result): Edge[] {
-    const edgeMap = new Map<string, Edge>();
-    
-    result.records.forEach((record: Record) => {
-      record.forEach((value, key) => {
-        if (neo4j.isRelationship(value)) {
-          const props = value.properties as any;
-          const id = props.id || `${value.startNodeElementId}-${value.type}-${value.endNodeElementId}`;
-          
-          // Skip if already processed
-          if (edgeMap.has(id)) return;
-          
-          // Map relationship type
-          let relationship: Relationship;
-          switch (value.type) {
-            case 'SENDS': relationship = Relationship.SENDS; break;
-            case 'RECEIVES': relationship = Relationship.RECEIVES; break;
-            case 'INTERACTS': relationship = Relationship.INTERACTS; break;
-            case 'CALLS': relationship = Relationship.CALLS; break;
-            case 'OWNS': relationship = Relationship.OWNS; break;
-            default: relationship = Relationship.UNKNOWN;
-          }
-          
-          // Create edge object
-          const edge: Edge = {
-            id,
-            source: value.startNodeElementId.toString(),
-            target: value.endNodeElementId.toString(),
-            relationship,
-            properties: { ...props }
-          };
-          
-          // Remove id from properties
-          delete edge.properties.id;
-          
-          edgeMap.set(id, edge);
-        }
-      });
-    });
-    
-    return Array.from(edgeMap.values());
   }
 
   /**
@@ -368,5 +708,45 @@ export class Neo4jGraphStorage implements GraphStorage {
       await this.driver.close();
       this.connected = false;
     }
+  }
+
+  private async extractNodes(result: QueryResult<Record<string, any>>): Promise<Node[]> {
+    const records = result.records;
+    const nodeMap = new Map<string, Node>();
+    
+    for (const record of records) {
+      // Extract all nodes from the record
+      for (const key of record.keys) {
+        const value = record.get(key);
+        
+        // If it's a node
+        if (value && neo4j.isNode(value)) {
+          // Cast to Neo4jNode
+          this.processNeo4jNode(value as Neo4jNode, nodeMap);
+        }
+      }
+    }
+    
+    return Array.from(nodeMap.values());
+  }
+
+  private async extractEdges(result: QueryResult<Record<string, any>>): Promise<Edge[]> {
+    const records = result.records;
+    const edgeMap = new Map<string, Edge>();
+    
+    for (const record of records) {
+      // Extract all relationships from the record
+      for (const key of record.keys) {
+        const value = record.get(key);
+        
+        // If it's a relationship
+        if (value && neo4j.isRelationship(value)) {
+          // Cast to Neo4jRelationship
+          this.processNeo4jRelationship(value as Neo4jRelationship, edgeMap, result);
+        }
+      }
+    }
+    
+    return Array.from(edgeMap.values());
   }
 } 

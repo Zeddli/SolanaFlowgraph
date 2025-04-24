@@ -1,4 +1,4 @@
-import { HybridStorage } from './types';
+import { HybridStorage, NodeType } from './types';
 
 /**
  * Entity tag for identifying and categorizing on-chain entities
@@ -15,6 +15,7 @@ export interface EntityTag {
   updatedAt: Date;
   createdBy?: string;
   metadata?: Record<string, any>;
+  isDeleted?: boolean; // Add this field to track deleted tags
 }
 
 /**
@@ -124,7 +125,8 @@ export class TagRepository {
       if (tag.entityType === 'wallet' || tag.entityType === 'program') {
         // Try to find the node first
         const nodeQuery = {
-          nodeIds: [tag.entityId]
+          startNodeId: tag.entityId,
+          maxDepth: 0 // Just get this node without traversing
         };
         
         const result = await this.storage.graph.query(nodeQuery);
@@ -139,7 +141,7 @@ export class TagRepository {
           // Node doesn't exist yet, create it
           await this.storage.graph.createNode({
             id: tag.entityId,
-            type: tag.entityType === 'wallet' ? 'Wallet' : 'Program',
+            type: tag.entityType === 'wallet' ? NodeType.WALLET : NodeType.PROGRAM,
             properties: {
               address: tag.entityId,
               tags: {
@@ -171,14 +173,14 @@ export class TagRepository {
       timestamp: new Date(),
       data: {
         ...tag,
-        deleted: true,
+        isDeleted: true, // Changed from 'deleted' to 'isDeleted'
         updatedAt: new Date()
       },
       tags: {
         entityType: tag.entityType,
         entityId: tag.entityId,
         tagName: tag.tagName,
-        deleted: true
+        isDeleted: true // Changed from 'deleted' to 'isDeleted'
       }
     });
     
@@ -187,7 +189,8 @@ export class TagRepository {
       if (tag.entityType === 'wallet' || tag.entityType === 'program') {
         // Try to find the node first
         const nodeQuery = {
-          nodeIds: [tag.entityId]
+          startNodeId: tag.entityId,
+          maxDepth: 0 // Just get this node without traversing
         };
         
         const result = await this.storage.graph.query(nodeQuery);
@@ -236,7 +239,7 @@ export class TagRepository {
       const tag = entry.data as EntityTag;
       
       // Skip deleted tags
-      if (tag.deleted) {
+      if (tag.isDeleted) {
         tagMap.delete(`${tag.tagName}_${tag.source || ''}`);
         continue;
       }
@@ -289,7 +292,7 @@ export class TagRepository {
         
         // Apply filters
         if (
-          !tag.deleted &&
+          !tag.isDeleted &&
           entityTypes.includes(tag.entityType) &&
           (!tag.confidence || tag.confidence >= minConfidence)
         ) {
@@ -333,7 +336,7 @@ export class TagRepository {
       
       // Apply filters
       if (
-        !tag.deleted &&
+        !tag.isDeleted &&
         entityTypes.includes(tag.entityType) &&
         (
           (exact && tag.tagValue === tagValue) ||
@@ -376,7 +379,7 @@ export class TagRepository {
       const tag = entry.data as EntityTag;
       
       // Skip deleted tags and non-matching entity types
-      if (tag.deleted || !entityTypes.includes(tag.entityType)) {
+      if (tag.isDeleted || !entityTypes.includes(tag.entityType)) {
         continue;
       }
       

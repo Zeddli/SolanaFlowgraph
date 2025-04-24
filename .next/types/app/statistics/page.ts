@@ -1,8 +1,8 @@
-// File: C:\Users\Zhi Jian\solana-flowgraph\src\app\statistics\page.tsx
-import * as entry from '../../../../src/app/statistics/page.js'
+// File: C:\Users\Zhi Jian\solana-flowgraph\app\statistics\page.tsx
+import * as entry from '../../../../app/statistics/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
-type TEntry = typeof import('../../../../src/app/statistics/page.js')
+type TEntry = typeof import('../../../../app/statistics/page.js')
 
 // Check that the entry is a valid entry
 checkFields<Diff<{
