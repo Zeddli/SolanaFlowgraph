@@ -747,7 +747,6 @@ export async function processWalletWithSolanaTracker(
     // Initialize client with API key
     const client = new Client({
       apiKey: apiKey,
-      timeout: 10000, // Add a timeout for requests
     });
     
     try {

@@ -1,0 +1,2 @@
+# Ignore src/app when deploying to Vercel
+src/app 

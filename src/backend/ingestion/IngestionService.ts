@@ -341,7 +341,10 @@ export class IngestionService extends EventEmitter implements IIngestionService 
     
     // Queue the slots for backfilling
     if (this.config.startSlot !== undefined && this.config.endSlot !== undefined) {
-      this.backfillQueue.addSlotRange(this.config.startSlot, this.config.endSlot, 10);
+      this.backfillQueue.addToQueue({
+        fromSlot: this.config.startSlot,
+        toSlot: this.config.endSlot
+      }, 10); // Priority 10
     }
     
     // Start polling to check progress
@@ -357,7 +360,10 @@ export class IngestionService extends EventEmitter implements IIngestionService 
     
     // Queue the slots for processing
     if (this.config.startSlot !== undefined && this.config.endSlot !== undefined) {
-      this.backfillQueue.addSlotRange(this.config.startSlot, this.config.endSlot, 5);
+      this.backfillQueue.addToQueue({
+        fromSlot: this.config.startSlot,
+        toSlot: this.config.endSlot
+      }, 5); // Priority 5
     }
     
     // We don't poll in batch mode, just let the backfill queue process everything
@@ -427,7 +433,10 @@ export class IngestionService extends EventEmitter implements IIngestionService 
           console.log(`Detected ${missedSlots} missed slots, adding to backfill queue`);
           
           // Add missed slots to backfill queue
-          this.backfillQueue.addSlotRange(this.lastProcessedSlot + 1, currentSlot - 1, 5);
+          this.backfillQueue.addToQueue({
+            fromSlot: this.lastProcessedSlot + 1,
+            toSlot: currentSlot - 1
+          }, 5);
         }
       }
       
@@ -533,9 +542,6 @@ export class IngestionService extends EventEmitter implements IIngestionService 
       this.status.itemsProcessed++;
       this.status.lastProcessedTimestamp = new Date();
       
-      // Mark as processed in backfill queue
-      this.backfillQueue.markTransactionProcessed(transaction.signature);
-      
       // If this transaction has a slot, update our last processed slot
       if (transaction.slot && transaction.slot > this.lastProcessedSlot) {
         this.lastProcessedSlot = transaction.slot;
@@ -545,8 +551,14 @@ export class IngestionService extends EventEmitter implements IIngestionService 
     } catch (error) {
       console.error(`Error processing transaction ${transaction.signature}:`, error);
       
-      // Add to backfill queue for retry
-      this.backfillQueue.addTransaction(transaction.signature, transaction.slot, 3);
+      // Add to backfill queue for retry - note: BackfillQueue doesn't have this method
+      // Instead we'll add a slot range for this specific slot
+      if (transaction.slot) {
+        this.backfillQueue.addToQueue({
+          fromSlot: transaction.slot,
+          toSlot: transaction.slot
+        }, 3);
+      }
     }
   }
   
