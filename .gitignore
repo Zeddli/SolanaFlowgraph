@@ -1,12 +1,2 @@
 .qodo
 node_modules/
-.env
-.env.local
-webpack/
-dist/
-coverage/
-.vscode/
-.idea/
-*.log
-*.tsbuildinfo
-*.next
