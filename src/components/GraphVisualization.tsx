@@ -41,7 +41,7 @@ export default function GraphVisualization({
   const [loading, setLoading] = useState(false);
   const [walletAddress, setWalletAddress] = useState('');
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useState(process.env.NEXT_PUBLIC_SOLANA_TRACKER_API_KEY || '');
   const [visualizationMode, setVisualizationMode] = useState<'mockData' | 'solanaData'>('mockData');
   const [error, setError] = useState<string | null>(null);
 
@@ -222,13 +222,8 @@ export default function GraphVisualization({
         const isMockData = data.nodes.some(node => node.id.startsWith('MockWallet'));
         
         if (isMockData) {
-          // Show a message that mock data is being used
+          // Just log the message without showing an alert
           console.log("Using mock data for visualization since Solscan API failed");
-          alert(
-            "Solscan API is currently unavailable.\n\n" +
-            "Showing a visualization with mock data to demonstrate the functionality.\n\n" +
-            "You can still view actual data on Solscan website."
-          );
         } else {
           console.log("Successfully loaded wallet data from Solscan:", data);
         }
@@ -562,29 +557,17 @@ export default function GraphVisualization({
               flexGrow: 1 
             }}
           />
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Solana Tracker API Key"
-            style={{ 
-              padding: '8px', 
-              borderRadius: '4px', 
-              border: '1px solid #ccc',
-              width: '200px'
-            }}
-          />
           <button 
             onClick={() => loadWalletDataWithTracker()}
-            disabled={loading || !walletAddress || !apiKey}
+            disabled={loading || !walletAddress}
             style={{
               padding: '8px 16px',
               backgroundColor: '#9945FF',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
-              cursor: loading || !walletAddress || !apiKey ? 'not-allowed' : 'pointer',
-              opacity: loading || !walletAddress || !apiKey ? 0.7 : 1
+              cursor: loading || !walletAddress ? 'not-allowed' : 'pointer',
+              opacity: loading || !walletAddress ? 0.7 : 1
             }}
           >
             {loading ? 'Loading...' : 'Visualize'}
@@ -598,7 +581,6 @@ export default function GraphVisualization({
           borderRadius: '4px'
         }}>
           <p style={{ margin: '0 0 5px 0' }}>This visualization uses the Solana Tracker Data API.</p>
-          <p style={{ margin: '0 0 5px 0' }}>You'll need an API key from <a href="https://www.solanatracker.io/data-api" target="_blank" rel="noopener noreferrer">solanatracker.io</a></p>
         </div>
       </div>
     );

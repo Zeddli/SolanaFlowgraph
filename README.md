@@ -131,6 +131,8 @@ NEXT_PUBLIC_HELIUS_API_KEY=your_key_here
 NEXT_PUBLIC_USE_MOCK_DATA=true
 ```
 
+
+
 ## Development
 
 ### Project Structure
