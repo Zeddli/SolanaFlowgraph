@@ -54,4 +54,4 @@ For detailed information about the technical implementation, refer to the [Archi
 
 ## Feedback and Contributions
 
-We welcome feedback and contributions to improve Solana FlowGraph. Please visit our [GitHub repository](https://github.com/zeddli/solana-flowgraph) to submit issues, feature requests, or pull requests. 
+We welcome feedback and contributions to improve Solana FlowGraph. Please visit our [GitHub repository](https://github.com/Zeddli/SolanaFlowgraph) to submit issues, feature requests, or pull requests. 
