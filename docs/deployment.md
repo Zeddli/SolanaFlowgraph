@@ -47,7 +47,7 @@ Follow these steps to set up a local development environment:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/Zeddli/SolanaFlowgraph
+git clone https://github.com/Zeddli/SolanaFlowgraph.git
 cd solana-flowgraph
 ```
 
