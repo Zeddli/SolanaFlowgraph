@@ -60,7 +60,7 @@ Solana FlowGraph consists of several key components:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/zeddli/solana-flowgraph.git
+git clone https://github.com/Zeddli/SolanaFlowgraph
 cd solana-flowgraph
 ```
 
