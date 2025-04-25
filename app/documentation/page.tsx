@@ -30,7 +30,7 @@ export default function DocumentationPage() {
             <p className="text-gray-600 mb-4">
               Detailed information about data collection, processing, and visualization techniques.
             </p>
-            <Link href="/documentation/data-sources" className="text-primary hover:text-primary-dark font-medium">
+            <Link href="https://github.com/Zeddli/SolanaFlowgraph/blob/main/docs/data-sources.md" className="text-primary hover:text-primary-dark font-medium">
               Read more →
             </Link>
           </div>
@@ -40,7 +40,7 @@ export default function DocumentationPage() {
             <p className="text-gray-600 mb-4">
               Comprehensive overview of system architecture, components, and implementation details.
             </p>
-            <Link href="/documentation/architecture" className="text-primary hover:text-primary-dark font-medium">
+            <Link href="https://github.com/Zeddli/SolanaFlowgraph/blob/main/docs/architecture.md" className="text-primary hover:text-primary-dark font-medium">
               Read more →
             </Link>
           </div>
